@@ -946,7 +946,7 @@ if(location.hash==='#pdf'){
         Emit '<h3>Admin roles (active assignments)</h3><table class="tbl"><thead><tr><th>Role</th><th>Tier</th><th>Active</th><th>Assessment</th><th>Members</th></tr></thead><tbody>'
         foreach ($r in $script:RoleRows) {
             $memItems = @(@($r.Users) | ForEach-Object { '<li>' + (Esc $_) + '</li>' })
-            if ($r.Other) { $memItems += ('<li class="muted">+ {0} non-user principal(s) (service principal / group)</li>' -f $r.Other) }
+            foreach ($o in @($r.OtherNames)) { $memItems += ('<li class="muted">' + (Esc $o) + '</li>') }
             $mem = if ($memItems.Count) { ('<details class="mini"><summary>show all {0}</summary><ul class="mem">{1}</ul></details>' -f $r.Count, ($memItems -join '')) } else { '<span class="muted">-</span>' }
             Emit ('<tr><td>{1}</td><td>{2}</td><td><b>{3}</b></td><td><span class="badge b-{0}">{4}</span> {5}</td><td>{6}</td></tr>' -f $r.Status.ToLower(), (Esc $r.Role), (Esc $r.Tier), $r.Count, $r.Status, (Esc $r.Note), $mem)
         }
@@ -1570,7 +1570,11 @@ foreach ($rd in $roleDefs) {
     }
     catch { $note = 'role not activated' }
     $upns  = @($members | Where-Object { $_.userPrincipalName } | ForEach-Object { $_.userPrincipalName })
-    $other = $members.Count - $upns.Count
+    $otherNames = @($members | Where-Object { -not $_.userPrincipalName } | ForEach-Object {
+        $kind = ("$($_.'@odata.type')" -replace '#microsoft\.graph\.', '') -replace 'servicePrincipal', 'service principal / app'
+        "{0}  [{1}]" -f $(if ($_.displayName) { $_.displayName } else { $_.id }), $(if ($kind) { $kind } else { 'non-user' })
+    })
+    $other = $otherNames.Count
     foreach ($u in $upns) { $allPriv[$u] = $true }
 
     if ($rd.Name -eq 'Global Administrator') {
@@ -1578,16 +1582,16 @@ foreach ($rd in $roleDefs) {
         $text = if ($members.Count -lt 2) { 'Too few - no redundancy (aim for 2-4)' } elseif ($members.Count -ge 5) { 'Too many (aim for 2-4)' } else { 'OK (2-4 recommended)' }
         Add-Finding 'Entra' 'Global Administrator count' $st ("{0} (recommended 2-4)" -f $members.Count) `
             'Keep 2 break-glass accounts plus a few named admins; use least-privilege roles for everyone else.' 'Free'
-        Set-LastFindingItems $upns 0
+        Set-LastFindingItems @($upns + $otherNames) 0
     }
     elseif ($members.Count -gt 5) {
         $st = 'WARN'; $text = 'More than 5 holders - review'
         Add-Finding 'Entra' ("{0} count" -f $rd.Name) WARN ("{0} members" -f $members.Count) 'Review: many holders of a high-privilege role.' 'Free'
-        Set-LastFindingItems $upns 0
+        Set-LastFindingItems @($upns + $otherNames) 0
     }
     else { $st = 'PASS'; $text = if ($note) { $note } elseif ($members.Count -eq 0) { 'No active members' } else { 'OK' } }
 
-    $script:RoleRows.Add([pscustomobject]@{ Role = $rd.Name; Tier = $rd.Tier; Count = $members.Count; Users = $upns; Other = $other; Status = $st; Note = $text })
+    $script:RoleRows.Add([pscustomobject]@{ Role = $rd.Name; Tier = $rd.Tier; Count = $members.Count; Users = $upns; Other = $other; OtherNames = $otherNames; Status = $st; Note = $text })
 
     $tierCol = switch ($rd.Tier) { 'Critical' { 'Magenta' } 'High' { 'Yellow' } default { 'Gray' } }
     $stCol   = switch ($st) { 'FAIL' { 'Red' } 'WARN' { 'Yellow' } default { 'Green' } }
@@ -1598,7 +1602,7 @@ foreach ($rd in $roleDefs) {
         Write-Host $text -ForegroundColor $stCol
         if ($rd.Tier -eq 'Critical' -and $upns.Count) {
             $show = $upns -join ', '
-            if ($other) { $show += "  [+$other non-user principal(s)]" }
+            if ($other) { $show += "  | non-user: " + ($otherNames -join ', ') }
             Write-Host ("      members: {0}" -f $show) -ForegroundColor DarkGray
         }
     }
