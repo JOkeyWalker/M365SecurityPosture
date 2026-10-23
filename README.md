@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33875298/README.md)
 # M365 Security Posture Report
 
 A **read-only** PowerShell script that audits the security configuration of a Microsoft 365 tenant and produces a color-coded console report plus a self-contained, SOC-style HTML report.
