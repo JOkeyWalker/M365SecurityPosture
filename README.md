@@ -156,4 +156,4 @@ With `-ExportConfig` a `M365-ConfigSnapshot-<tenant>-<timestamp>.json` file is a
 - The script only reads configuration; it does not create, change or delete anything.
 - Review the code and test in a non-production tenant before running it against production.
 - Findings are guidance based on Microsoft and CISA-style recommendations. They are not a substitute for a formal security assessment or for your organization's own policies.
-- Provided as-is, without warranty.
+
